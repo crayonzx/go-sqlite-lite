@@ -241,6 +241,7 @@ int sqlite3_blocking_prepare_v2(
 import "C"
 
 import (
+	"database/sql"
 	"fmt"
 	"io"
 	"os"
@@ -1065,6 +1066,14 @@ func (s *Stmt) scan(i int, v interface{}) error {
 	case io.Writer:
 		_, err = v.Write(blob(s.stmt, C.int(i), false))
 	default:
+		if scanner, ok := v.(sql.Scanner); ok {
+			var any interface{}
+			err := s.scanDynamic(i, &any)
+			if err != nil {
+				return err
+			}
+			return scanner.Scan(any)
+		}
 		return pkgErr(MISUSE, "unscannable type for column %d (%T)", int(i), v)
 	}
 	if err != nil {

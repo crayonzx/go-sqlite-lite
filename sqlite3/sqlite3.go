@@ -242,6 +242,7 @@ import "C"
 
 import (
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"io"
 	"os"
@@ -819,6 +820,11 @@ func (s *Stmt) Exec(args ...interface{}) error {
 func (s *Stmt) Bind(args ...interface{}) error {
 	for i, v := range args {
 		var rc C.int
+		looped := false
+		setV := func(value interface{}) {
+			v = value
+		}
+	LoopV:
 		if v == nil {
 			rc = C.sqlite3_bind_null(s.stmt, C.int(i+1))
 			if rc != OK {
@@ -856,6 +862,16 @@ func (s *Stmt) Bind(args ...interface{}) error {
 			}
 			return s.bindNamed(v)
 		default:
+			if valuer, ok := v.(driver.Valuer); ok && !looped {
+				looped = true
+				v, err := valuer.Value()
+				if err != nil {
+					return err
+				}
+				setV(v)
+				goto LoopV
+			}
+
 			return pkgErr(MISUSE, "unsupported type at index %d (%T)", i, v)
 		}
 		if rc != OK {
